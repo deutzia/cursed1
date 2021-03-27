@@ -1,4 +1,7 @@
 *.o
 *.swp
 *.swo
-./converter
+converter
+*.tar
+z1_test
+zso1-example

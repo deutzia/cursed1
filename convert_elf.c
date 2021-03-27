@@ -1,9 +1,9 @@
 #include "convert_elf.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 Elf64_Ehdr *convert_hdr(Elf32_Ehdr *e32)
 {
@@ -49,64 +49,50 @@ Elf64_Sym *convert_symbol(Elf32_Sym *e32, int str_offset, int *sections_reorder)
     e64->st_size = e32->st_size;
     fprintf(stderr, "symbol size = %lu symbol_type = ", e64->st_size);
 
-    switch (ELF32_ST_TYPE(e32->st_info)) {
-        case STT_NOTYPE:
-        {
-            fprintf(stderr, "STT_NOTYPE\n");
-            break;
-        }
-        case STT_FUNC:
-        {
-            fprintf(stderr, "STT_FUNC\n");
-            break;
-        }
-        case STT_OBJECT:
-        {
-            fprintf(stderr, "STT_OBJECT\n");
-            break;
-        }
-        case STT_SECTION:
-        {
-            fprintf(stderr, "STT_SECTION\n");
-            break;
-        }
-        case STT_FILE:
-        {
-            fprintf(stderr, "STT_FILE\n");
-            break;
-        }
-        default:
-        {
-            fprintf(stderr, "OTHER TYPE\n");
-            break;
-        }
+    switch (ELF32_ST_TYPE(e32->st_info))
+    {
+    case STT_NOTYPE: {
+        fprintf(stderr, "STT_NOTYPE\n");
+        break;
+    }
+    case STT_FUNC: {
+        fprintf(stderr, "STT_FUNC\n");
+        break;
+    }
+    case STT_OBJECT: {
+        fprintf(stderr, "STT_OBJECT\n");
+        break;
+    }
+    case STT_SECTION: {
+        fprintf(stderr, "STT_SECTION\n");
+        break;
+    }
+    case STT_FILE: {
+        fprintf(stderr, "STT_FILE\n");
+        break;
+    }
+    default: {
+        fprintf(stderr, "OTHER TYPE\n");
+        break;
+    }
         fprintf(stderr, "\n");
     }
 
     return e64;
 }
 
-Elf64_Shdr *convert_shdr(Elf32_Shdr *e32, off_t str_offset,
-                         int *sections_reorder, off_t section_offset)
+void convert_shdr(Elf32_Shdr *e32, Elf64_Shdr *e64, off_t section_offset)
 {
-    Elf64_Shdr *e64 = malloc(sizeof(Elf64_Shdr));
-    if (e64 == NULL)
-    {
-        return NULL;
-    }
-
-    e64->sh_name = e32->sh_name + str_offset;
+    e64->sh_name = e32->sh_name;
     e64->sh_type = e32->sh_type;
     e64->sh_flags = e32->sh_flags;
     e64->sh_addr = e32->sh_addr;
     e64->sh_offset = section_offset;
     e64->sh_size = e32->sh_size;
-    e64->sh_link = sections_reorder[e32->sh_link];
+    e64->sh_link = e32->sh_link;
     e64->sh_info =
         e32->sh_info; /* has to be changed separately for REL and SYMTAB */
     e64->sh_addralign = 16; /* fixed 16 for simplicity */
     e64->sh_entsize =
         e32->sh_entsize; /* has to be changed separately for REL and SYMTAB */
-
-    return e64;
 }

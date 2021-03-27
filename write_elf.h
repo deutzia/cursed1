@@ -10,10 +10,9 @@ int copy_sections(FILE *, void *);
 
 int create_strtab(FILE *, void *);
 
-int create_symtab(FILE *, void *, off_t str_offset, int *sections_reorder);
+int create_symtab(FILE *, void *, off_t str_offset, int *sections_reorder,
+                  int sections64);
 
-int create_headers(FILE *, void *, off_t str_offset, int *sections_reorder,
-                   off_t *sections_offsets, int symtabidx,
-                   int first_nonlocal_symbol, off_t strings_len, int symbols);
+int write_headers(FILE *, Elf64_Shdr *, int sections64);
 
 #endif /* ZSO_WRITE_ELF */

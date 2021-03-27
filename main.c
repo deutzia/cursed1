@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
     Elf64_Ehdr *e64hdr = NULL;
     int *sections_reorder = NULL;
     off_t *sections_offsets = NULL;
+    Elf64_Shdr *e64shdr = NULL;
 
     if (argc != 4)
     {
@@ -92,17 +93,15 @@ int main(int argc, char *argv[])
     int symbols, first_nonlocal_symbol, symtabidx;
     off_t symbol_names_offset, section_names_offset;
 
-    if (count_things(mapped_elf, &sections64_count, &shdr_off, &strings_len,
-                     &symbols, &first_nonlocal_symbol, &sections_reorder,
-                     &sections_offsets, &symbol_names_offset,
+    if (count_things(mapped_elf, &sections64_count, &e64shdr, &shdr_off,
+                     &strings_len, &symbols, &first_nonlocal_symbol,
+                     &sections_reorder, &sections_offsets, &symbol_names_offset,
                      &section_names_offset, &symtabidx) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to do counting of objects in the elf";
         goto handle_err;
     }
-
-    sections64_count += 2;
 
     e64hdr = convert_hdr(e32hdr);
     if (e64hdr == NULL)
@@ -148,22 +147,21 @@ int main(int argc, char *argv[])
     }
 
     if (create_symtab(elf_outfile, mapped_elf, symbol_names_offset,
-                      sections_reorder) != 0)
+                      sections_reorder, sections64_count) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to produce symtab section";
         goto handle_err;
     }
 
-    if (create_headers(elf_outfile, mapped_elf, section_names_offset,
-                       sections_reorder, sections_offsets, symtabidx,
-                       first_nonlocal_symbol, strings_len, symbols) != 0)
+    if (write_headers(elf_outfile, e64shdr, sections64_count) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to write section headers";
         goto handle_err;
     }
 
+    free(e64shdr);
     free(sections_offsets);
     free(sections_reorder);
     fclose(elf_outfile);
@@ -176,6 +174,10 @@ int main(int argc, char *argv[])
 
 handle_err:
     err = errno;
+    if (e64shdr != NULL)
+    {
+        free(e64shdr);
+    }
     if (sections_offsets != NULL)
     {
         free(sections_offsets);

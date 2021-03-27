@@ -6,11 +6,11 @@
 
 /* if returned value is not zero then it errored */
 int count_things(
-    void *elf,
-    int *sections_to_copy, /* number of sections to copy wo touching them */
-    off_t *size_total,      /* size of stuff before section headers */
-    off_t *strtab_len,      /* length of STRTAB entries that get copied */
-    int *symbols,          /* count symbols */
+    void *elf, int *sections64, /* number of sections that will be generated */
+    Elf64_Shdr **e64shdr,       /*headers of sections that will be created */
+    off_t *size_total,          /* size of stuff before section headers */
+    off_t *strtab_len,          /* length of STRTAB entries that get copied */
+    int *symbols,               /* count symbols */
     int *first_nonlocal_symbol, /* used for st_info in symtab header */
     int **sections_reorder,     /* mapping of old section numbers to new ones */
     off_t *

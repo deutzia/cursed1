@@ -9,3 +9,6 @@ Assumptions:
   like clang)
 * All sections get aligned to 16 for simplicity. It is assumed that header size
   is divisible by 16.
+* All local symbols are located before glocal symbols, as described in
+  https://docs.oracle.com/cd/E53394_01/html/E54813/man-sts.html#scrolltoc
+

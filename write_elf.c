@@ -169,7 +169,7 @@ int create_symtab(FILE *f, void *elf, off_t str_offset, int *sections_reorder)
 
 int create_headers(FILE *f, void *elf, off_t str_offset, int *sections_reorder,
                    off_t *sections_offsets, int symtabidx,
-                   int first_nonlocal_symbol, off_t strings_len)
+                   int first_nonlocal_symbol, off_t strings_len, int symbols)
 {
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
     Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
@@ -243,6 +243,7 @@ int create_headers(FILE *f, void *elf, off_t str_offset, int *sections_reorder,
                            sections_offsets[symtabidx]);
     e64shdr->sh_entsize = sizeof(Elf64_Sym);
     e64shdr->sh_info = first_nonlocal_symbol;
+    e64shdr->sh_size = symbols * sizeof(Elf64_Sym);
     if (e64shdr == NULL)
     {
         return 1;

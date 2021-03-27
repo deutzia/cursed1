@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 
     if (create_headers(elf_outfile, mapped_elf, section_names_offset,
                        sections_reorder, sections_offsets, symtabidx,
-                       first_nonlocal_symbol, strings_len) != 0)
+                       first_nonlocal_symbol, strings_len, symbols) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to write section headers";

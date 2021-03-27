@@ -1,0 +1,11 @@
+Assumptions:
+* Exactly one section SHT_SYMTAB exists and it links to .strtab
+* There can be dead strings in some SHT_STRTAB
+  https://docs.oracle.com/cd/E53394_01/html/E54813/chapter6-73709.html#scrolltoc
+  This documentation suggests that unreferenced strings are allowed, so I'm
+  keeping names of removed sections for simplicity.
+* .syntab does not exits, and .strtab and .shstrtab can be glued together into
+  .strtab if both exist (gcc produces both, clang only the former, so I'll act
+  like clang)
+* All sections get aligned to 16 for simplicity. It is assumed that header size
+  is divisible by 16.

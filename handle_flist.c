@@ -81,11 +81,10 @@ bool initialize_flist(FILE *file)
                 }
                 if (word_count == 0)
                 {
-                    node = malloc(sizeof(flist));
+                    node = calloc(1, sizeof(flist));
                     if (node == NULL)
                     {
                         free(buffer);
-                        destruct_flist();
                         return false;
                     }
                     node->name = malloc((i - word_begining + 1) * sizeof(char));
@@ -93,11 +92,9 @@ bool initialize_flist(FILE *file)
                     {
                         free(buffer);
                         free(node);
-                        destruct_flist();
                         return false;
                     }
                     strcpy(node->name, buffer + word_begining);
-                    word_begining = i + 1;
                 }
                 else
                 {
@@ -110,7 +107,6 @@ bool initialize_flist(FILE *file)
                         free(buffer);
                         free(node->name);
                         free(node);
-                        destruct_flist();
                         return false;
                     }
                 }
@@ -119,9 +115,9 @@ bool initialize_flist(FILE *file)
                     free(buffer);
                     free(node->name);
                     free(node);
-                    destruct_flist();
                     return false;
                 }
+                word_begining = i + 1;
             }
         }
         if (node != NULL)
@@ -144,6 +140,7 @@ tlist *lookup_flist(const char *fname)
         {
             return &(current_node->f);
         }
+        current_node = current_node->next;
     }
     return NULL;
 }

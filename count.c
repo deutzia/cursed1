@@ -114,7 +114,7 @@ int count_things(
      */
     for (int i = 0; i < e32hdr->e_shnum; ++i)
     {
-        printf("%s:\t", shstrtab + e32shdr[i].sh_name);
+        fprintf(stderr, "%s:\t", shstrtab + e32shdr[i].sh_name);
         switch (e32shdr[i].sh_type)
         {
         case SHT_NULL: /* explicitly copy 0th element of section table */
@@ -125,7 +125,7 @@ int count_things(
             break;
         }
         case SHT_SYMTAB: {
-            printf("SHT_SYMTAB");
+            fprintf(stderr, "SHT_SYMTAB");
             int num_entries = e32shdr[i].sh_size / e32shdr[i].sh_entsize;
 
             Elf32_Sym *e32sym = (Elf32_Sym *)(elf + e32shdr[i].sh_offset);
@@ -172,6 +172,16 @@ int count_things(
                         strcpy((*trampoline_strtab) + (*trampoline_strtab_len),
                                symbol_name);
                         (*trampoline_strtab_len) += strlen(symbol_name) + 1;
+                        /* write which side trampolines should be generated to
+                         * stdout */
+                        if (ELF32_ST_TYPE(e32sym[j].st_info) == STT_NOTYPE)
+                        {
+                            printf("%s out\n", symbol_name);
+                        }
+                        else
+                        {
+                            printf("%s in\n", symbol_name);
+                        }
                     }
                     else
                     {
@@ -199,11 +209,11 @@ int count_things(
                 }
                 }
             }
-            printf("(%d)", num_entries);
+            fprintf(stderr, "(%d)", num_entries);
             break;
         }
         case SHT_STRTAB: {
-            printf("SHT_STRTAB");
+            fprintf(stderr, "SHT_STRTAB");
             break;
         }
         case SHT_NOTE: /* explicitly don't copy this */
@@ -225,11 +235,11 @@ int count_things(
                                1; /* or-ing here aligns size to 16 */
                 fprintf(stderr, "Changing size_total to %ld\n", *size_total);
             }
-            printf("OTHER SECTION: %d", e32shdr[i].sh_type);
+            fprintf(stderr, "OTHER SECTION: %d", e32shdr[i].sh_type);
         }
         }
-        printf("\talloc: %d num: %d link:%d\n", e32shdr[i].sh_flags & SHF_ALLOC,
-               i, e32shdr[i].sh_link);
+        fprintf(stderr, "\talloc: %d num: %d link:%d\n",
+                e32shdr[i].sh_flags & SHF_ALLOC, i, e32shdr[i].sh_link);
     }
 
     for (int i = 0; i < e32hdr->e_shnum; ++i)

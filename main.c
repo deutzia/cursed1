@@ -43,6 +43,7 @@ int main(int argc, char *argv[])
     Elf64_Shdr *e64shdr = NULL;
     char *trampoline_strtab = NULL;
     Elf64_Sym *e64sym = NULL;
+    Elf64_Rela *e64rel = NULL;
 
     if (argc != 4)
     {
@@ -103,12 +104,13 @@ int main(int argc, char *argv[])
     int symbols, symtabidx;
     off_t symbol_names_offset, section_names_offset;
     size_t trampoline_strtab_len = 0;
+    size_t rel_size = 0;
 
     if (count_things(mapped_elf, &sections64_count, &e64shdr, &shdr_off,
                      &strings_len, &symbols, &sections_reorder,
                      &sections_offsets, &symbol_names_offset,
                      &section_names_offset, &symtabidx, &trampoline_strtab,
-                     &trampoline_strtab_len, &e64sym) != 0)
+                     &trampoline_strtab_len, &e64sym, &e64rel, &rel_size) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to do counting of objects in the elf";
@@ -151,6 +153,13 @@ int main(int argc, char *argv[])
         goto handle_err;
     }
 
+    if (write_relocations(elf_outfile, e64rel, rel_size) != 0)
+    {
+        handler = handle_fatal;
+        msg = "Failed to write relocations";
+        goto handle_err;
+    }
+
     if (create_strtab(elf_outfile, mapped_elf, trampoline_strtab,
                       trampoline_strtab_len) != 0)
     {
@@ -174,6 +183,7 @@ int main(int argc, char *argv[])
     }
 
     destruct_flist();
+    free(e64rel);
     free(trampoline_strtab);
     free(e64sym);
     free(e64shdr);
@@ -190,6 +200,10 @@ int main(int argc, char *argv[])
 handle_err:
     err = errno;
     destruct_flist();
+    if (e64rel != NULL)
+    {
+        free(e64rel);
+    }
     if (trampoline_strtab != NULL)
     {
         free(trampoline_strtab);

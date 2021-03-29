@@ -11,4 +11,4 @@ Assumptions:
   is divisible by 16.
 * All local symbols are located before glocal symbols, as described in
   https://docs.oracle.com/cd/E53394_01/html/E54813/man-sts.html#scrolltoc
-
+* There are no relocations to symtab and strtab, those would be weird.

@@ -87,5 +87,22 @@ void convert_shdr(Elf32_Shdr *e32, Elf64_Shdr *e64, off_t section_offset,
         e32->sh_info; /* has to be changed separately for REL and SYMTAB */
     e64->sh_addralign = 16; /* fixed 16 for simplicity */
     e64->sh_entsize =
-        e32->sh_entsize; /* has to be changed separately for REL and SYMTAB */
+        e32->sh_entsize; /* has to be changed separately for REL */
+}
+
+void convert_relocation(Elf32_Rel *e32, Elf64_Rela *e64, void *section_contents)
+{
+    int sym = ELF32_R_SYM(e32->r_info); /*symbol indices don't change */
+    int type = ELF32_R_TYPE(e32->r_info);
+    if (type == R_386_32)
+    {
+        type = R_X86_64_32;
+    }
+    else /* assume there is no other rellocation type */
+    {
+        type = R_X86_64_PC32;
+    }
+    e64->r_offset = e32->r_offset;
+    e64->r_info = ELF64_R_INFO(sym, type);
+    e64->r_addend = *(uint32_t *)(section_contents + e32->r_offset);
 }

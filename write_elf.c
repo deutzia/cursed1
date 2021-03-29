@@ -14,11 +14,13 @@ size_t fwrite_helper(const void *ptr, size_t s1, size_t s2, FILE *f)
 
 size_t write_hdr(FILE *f, Elf64_Ehdr *header)
 {
+    fprintf(stderr, "writing elf header\n");
     return fwrite_helper(header, 1, sizeof(Elf64_Ehdr), f);
 }
 
 int copy_sections(FILE *f, void *elf)
 {
+    fprintf(stderr, "copying sections\n");
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
     Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
 
@@ -54,9 +56,20 @@ int copy_sections(FILE *f, void *elf)
     return 0;
 }
 
+int write_relocations(FILE *f, Elf64_Rela *e64, size_t rel_size)
+{
+    fprintf(stderr, "writing relocations\n");
+    if (fwrite_helper(e64, 1, rel_size, f) != rel_size)
+    {
+        return 1;
+    }
+    return 0;
+}
+
 int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
                   size_t trampoline_strtab_len)
 {
+    fprintf(stderr, "writing strtab\n");
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
     Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
 
@@ -66,8 +79,6 @@ int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
     {
         if (e32shdr[i].sh_type == SHT_STRTAB)
         {
-            fprintf(stderr, "First byte of STRTAB: %x\n",
-                    *(char *)(elf + e32shdr[i].sh_offset));
             if (fwrite_helper(elf + e32shdr[i].sh_offset, 1, e32shdr[i].sh_size,
                               f) != e32shdr[i].sh_size)
             {
@@ -94,10 +105,14 @@ int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
 
 int write_symtab(FILE *f, Elf64_Sym *e64, int symbols)
 {
-    fprintf(stderr, "there are %d symbols, size of one is %lu\n", symbols,
-            sizeof(Elf64_Sym));
-    if (fwrite_helper(e64, 1, sizeof(Elf64_Sym) * symbols, f) !=
-        sizeof(Elf64_Sym) * symbols)
+    fprintf(stderr, "writing symtab\n");
+    size_t s = sizeof(Elf64_Sym) * symbols;
+    if (fwrite_helper(e64, 1, s, f) != s)
+    {
+        return 1;
+    }
+    s = ((s | 0xf) + 1) - s;
+    if (fwrite_helper(zeroes, 1, s, f) != s)
     {
         return 1;
     }
@@ -106,6 +121,7 @@ int write_symtab(FILE *f, Elf64_Sym *e64, int symbols)
 
 int write_headers(FILE *f, Elf64_Shdr *e64, int sections)
 {
+    fprintf(stderr, "Writing %d section headers\n", sections);
     if (fwrite_helper(e64, 1, sizeof(Elf64_Shdr) * sections, f) !=
         sizeof(Elf64_Shdr) * sections)
     {

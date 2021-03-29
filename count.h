@@ -20,7 +20,9 @@ int count_things(
     char **
         trampoline_strtab, /* new strtab that needs to be glued into old ones */
     size_t *trampoline_strtab_len, /* length of that strtab */
-    Elf64_Sym **e64sym /* symbols that need to be pasted into resulting elf */
+    Elf64_Sym **e64sym,  /* symbols that need to be pasted into resulting elf */
+    Elf64_Rela **e64rel, /* relocations that need to be pasted */
+    size_t *rel_size     /* size of such relocations */
 );
 
 #endif /* ZSO_COUNT */

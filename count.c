@@ -25,7 +25,9 @@ int count_things(
     char **
         trampoline_strtab, /* new strtab that needs to be glued into old ones */
     size_t *trampoline_strtab_len, /* length of that strtab */
-    Elf64_Sym **e64sym /* symbols that need to be pasted into resulting elf */
+    Elf64_Sym **e64sym,  /* symbols that need to be pasted into resulting elf */
+    Elf64_Rela **e64rel, /* relocations that need to be pasted */
+    size_t *rel_size     /* size of such relocations */
 )
 {
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
@@ -69,6 +71,8 @@ int count_things(
     size_t trampoline_strtab_allocated =
         get_flist_size() * (strlen(TRAMPOLINE_PREFIX) + 10);
     *trampoline_strtab = malloc(trampoline_strtab_allocated);
+    *rel_size = 0;
+    *e64rel = NULL;
     if (*trampoline_strtab == NULL)
     {
         return 1;
@@ -207,8 +211,6 @@ int count_things(
             break;
         }
         case SHT_REL: {
-            printf("SHT_REL");
-            //                exit(1); /* TODO */
             break;
         }
         default: {
@@ -228,6 +230,52 @@ int count_things(
         }
         printf("\talloc: %d num: %d link:%d\n", e32shdr[i].sh_flags & SHF_ALLOC,
                i, e32shdr[i].sh_link);
+    }
+
+    for (int i = 0; i < e32hdr->e_shnum; ++i)
+    {
+        /* checking sh_info here assumes that there are no relocations to strtab
+         * or symtab */
+        if (e32shdr[i].sh_type == SHT_REL &&
+            sections_reorder[e32shdr[i].sh_info] != 0)
+        {
+            fprintf(stderr, "SHT_REL\n");
+            int num_entries = e32shdr[i].sh_size / e32shdr[i].sh_entsize;
+            size_t new_size = (*rel_size) + num_entries * sizeof(Elf64_Rela);
+            new_size = (new_size | 0xf) + 1;
+            void *new_mem = realloc(*e64rel, new_size);
+            if (new_mem == NULL)
+            {
+                return 1;
+            }
+            *e64rel = new_mem;
+            Elf32_Rel *e32rel = (Elf32_Rel *)(elf + e32shdr[i].sh_offset);
+            for (int j = 0; j < num_entries; ++j)
+            {
+                convert_relocation(e32rel + j,
+                                   (Elf64_Rela *)(((void *)(*e64rel)) +
+                                                  (*rel_size) +
+                                                  j * sizeof(Elf64_Rela)),
+                                   elf + e32shdr[i].sh_offset);
+            }
+            convert_shdr(e32shdr + i, (*e64shdr) + (*sections64), *size_total,
+                         *section_names_offset);
+            (*sections_offsets)[i] = *size_total;
+            (*sections_reorder)[i] = *sections64;
+            *size_total += ((num_entries * sizeof(Elf64_Rela)) | 0xf) + 1;
+            fprintf(stderr, "Changing size_total to %ld\n", *size_total);
+            (*e64shdr)[*sections64].sh_type = SHT_RELA;
+            (*e64shdr)[*sections64].sh_info =
+                (*sections_reorder)[(*e64shdr)[*sections64].sh_info];
+            (*e64shdr)[*sections64].sh_entsize = sizeof(Elf64_Rela);
+            (*e64shdr)[*sections64].sh_size = sizeof(Elf64_Rela) * num_entries;
+            (*sections64)++;
+            fprintf(stderr, "Increased sections64 to %d\n", *sections64);
+            *rel_size += num_entries * sizeof(Elf64_Rela);
+            int missing = ((*rel_size) | 0xf) + 1 - *rel_size;
+            memset(((void *)(*e64rel)) + (*rel_size), '\0', missing);
+            *rel_size += missing;
+        }
     }
 
     for (int i = 0; i < e32hdr->e_shnum; ++i)
@@ -289,7 +337,7 @@ int count_things(
     (*e64shdr)[*sections64].sh_entsize = sizeof(Elf64_Sym);
     (*e64shdr)[*sections64].sh_size = (*symbols) * sizeof(Elf64_Sym);
     (*sections64)++;
-    *size_total += (*symbols) * sizeof(Elf64_Sym);
+    *size_total += (((*symbols) * sizeof(Elf64_Sym)) | 0xf) + 1;
     fprintf(stderr, "Changing size_total to %ld\n", *size_total);
 
     fprintf(stderr, "There are %d sections\n", *sections64);
@@ -297,7 +345,6 @@ int count_things(
     for (int i = 0; i < *sections64; ++i)
     {
         (*e64shdr)[i].sh_link = (*sections_reorder)[(*e64shdr)[i].sh_link];
-        fprintf(stderr, "[OFFSET IN STRTAB] %d\n", (*e64shdr)[i].sh_name);
     }
 
     fprintf(stderr,

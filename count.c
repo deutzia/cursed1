@@ -4,20 +4,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "convert_elf.h"
+#include "handle_flist.h"
+
+const char *TRAMPOLINE_PREFIX = "_ZSO_trampoline_";
+
 int count_things(
     void *elf,
-    int *sections64,      /* number of sections to copy wo touching them */
-    Elf64_Shdr **e64shdr, /*headers of sections that will be created */
-    off_t *size_total,    /* size of stuff before section headers */
-    off_t *strtab_len,    /* length of STRTAB entries that get copied */
-    int *symbols,         /* count symbols */
-    int *first_nonlocal_symbol, /* used for st_info in symtab header */
-    int **sections_reorder,     /* mapping of old section numbers to new ones */
+    int *sections64,        /* number of sections to copy wo touching them */
+    Elf64_Shdr **e64shdr,   /* headers of sections that will be created */
+    off_t *size_total,      /* size of stuff before section headers */
+    off_t *strtab_len,      /* length of STRTAB entries that get copied */
+    int *symbols,           /* count symbols */
+    int **sections_reorder, /* mapping of old section numbers to new ones */
     off_t *
         *sections_offsets, /* mapping of old section numbers to new offsets */
     off_t *symbol_names_offset,  /* offset of preexisting symbol names */
     off_t *section_names_offset, /* offset of preexisting section names */
-    int *symtabidx               /* index of symtab */
+    int *symtabidx,              /* index of symtab */
+    char **
+        trampoline_strtab, /* new strtab that needs to be glued into old ones */
+    size_t *trampoline_strtab_len, /* length of that strtab */
+    Elf64_Sym **e64sym /* symbols that need to be pasted into resulting elf */
 )
 {
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
@@ -32,7 +40,7 @@ int count_things(
         {
             symstrndx = e32shdr[i].sh_link;
             *symtabidx = i;
-            break;
+            break; /*assume there is exactly one symtab */
         }
     }
     char *shstrtab = (char *)(elf + e32shdr[e32hdr->e_shstrndx].sh_offset);
@@ -54,14 +62,51 @@ int count_things(
     *sections64 = 0;
     *size_total = sizeof(Elf64_Ehdr);
     *strtab_len = 0;
-    *symbols = 1; /* there always is STT_NOTYPE at the begining */
+    *symbols = 0;
     *symbol_names_offset = 0;
     *section_names_offset = 0;
-    *first_nonlocal_symbol = 1; /* count STT_NOTYPE */
+    *trampoline_strtab_len = 0;
+    size_t trampoline_strtab_allocated =
+        get_flist_size() * (strlen(TRAMPOLINE_PREFIX) + 10);
+    *trampoline_strtab = malloc(trampoline_strtab_allocated);
+    if (*trampoline_strtab == NULL)
+    {
+        return 1;
+    }
+
+    for (int i = 0; i < e32hdr->e_shnum; ++i)
+    {
+        if (e32shdr[i].sh_type == SHT_STRTAB)
+        {
+            if (i == shstrndx)
+            {
+                *section_names_offset += *strtab_len;
+            }
+            if (i == symstrndx)
+            {
+                *symbol_names_offset += *strtab_len;
+            }
+            *strtab_len += e32shdr[i].sh_size;
+        }
+        else
+        {
+            if (e32shdr[i].sh_type == SHT_SYMTAB)
+            {
+                *symbols = e32shdr[i].sh_size / e32shdr[i].sh_entsize;
+            }
+        }
+    }
+
+    fprintf(stderr, "There are %d symbols\n", *symbols);
+    *e64sym = calloc(*symbols, sizeof(Elf64_Sym));
+    if (*e64sym == NULL)
+    {
+        return 1;
+    }
 
     /* after this loop the following have to be fixed:
      * links need to be reordered
-     * offests of section names in strtab have to be updated
+     * section symbols have to be fixed
      */
     for (int i = 0; i < e32hdr->e_shnum; ++i)
     {
@@ -71,7 +116,7 @@ int count_things(
         case SHT_NULL: /* explicitly copy 0th element of section table */
         {
             (*sections_reorder)[i] = (*sections64);
-            convert_shdr(e32shdr + i, (*e64shdr) + (*sections64), 0);
+            convert_shdr(e32shdr + i, (*e64shdr) + (*sections64), 0, 0);
             (*sections64)++;
             break;
         }
@@ -80,19 +125,69 @@ int count_things(
             int num_entries = e32shdr[i].sh_size / e32shdr[i].sh_entsize;
 
             Elf32_Sym *e32sym = (Elf32_Sym *)(elf + e32shdr[i].sh_offset);
+            if (e32shdr[i].sh_link == 0)
+            {
+                /* no name info, considering this incorrect */
+                return 1;
+            }
+            char *strtab = elf + e32shdr[e32shdr[i].sh_link].sh_offset;
             for (int j = 0; j < num_entries; ++j)
             {
                 switch (ELF32_ST_TYPE(e32sym[j].st_info))
                 {
-                case STT_FUNC:
+                case STT_NOTYPE:
+                case STT_FUNC: { /* symbols that may be found in flist */
+                    char *symbol_name = strtab + e32sym[j].st_name;
+                    fprintf(stderr, "Processing symbol %s\n", symbol_name);
+                    tlist *arg = lookup_flist(symbol_name);
+                    if (arg != NULL)
+                    {
+                        /* trampoline will be generated for this symbol */
+                        size_t new_len =
+                            strlen(TRAMPOLINE_PREFIX) + strlen(symbol_name) + 1;
+                        convert_symbol(e32sym + j, (*e64sym) + j,
+                                       *symbol_names_offset);
+                        (*e64sym)[j].st_name =
+                            (*trampoline_strtab_len) + (*strtab_len);
+                        while ((*trampoline_strtab_len) + new_len >
+                               trampoline_strtab_allocated)
+                        {
+                            void *new_mem =
+                                realloc(*trampoline_strtab,
+                                        2 * trampoline_strtab_allocated);
+                            if (new_mem == NULL)
+                            {
+                                return -1;
+                            }
+                            *trampoline_strtab = new_mem;
+                            trampoline_strtab_allocated *= 2;
+                        }
+                        strcpy((*trampoline_strtab) + (*trampoline_strtab_len),
+                               TRAMPOLINE_PREFIX);
+                        (*trampoline_strtab_len) += strlen(TRAMPOLINE_PREFIX);
+                        strcpy((*trampoline_strtab) + (*trampoline_strtab_len),
+                               symbol_name);
+                        (*trampoline_strtab_len) += strlen(symbol_name) + 1;
+                    }
+                    else
+                    {
+                        convert_symbol(e32sym + j, (*e64sym) + j,
+                                       *symbol_names_offset);
+                    }
+                    break;
+                }
                 case STT_OBJECT: {
                     if (ELF32_ST_BIND(e32sym[j].st_info) == STB_LOCAL)
                     {
                         // assume all local ones are before nonlocal ones */
-                        (*first_nonlocal_symbol)++;
                     }
-                    (*symbols)++;
+                    convert_symbol(e32sym + j, (*e64sym) + j,
+                                   *symbol_names_offset);
                     break;
+                }
+                case STT_SECTION: {
+                    /* 0 as third arg bc those symbols don't have names */
+                    convert_symbol(e32sym + j, (*e64sym) + j, 0);
                 }
                 default: {
                     /* ignore all the others */
@@ -104,15 +199,6 @@ int count_things(
             break;
         }
         case SHT_STRTAB: {
-            if (i == shstrndx)
-            {
-                *section_names_offset += *strtab_len;
-            }
-            if (i == symstrndx)
-            {
-                *symbol_names_offset += *strtab_len;
-            }
-            *strtab_len += e32shdr[i].sh_size;
             printf("SHT_STRTAB");
             break;
         }
@@ -130,7 +216,7 @@ int count_things(
             {
                 (*sections_reorder)[i] = (*sections64);
                 convert_shdr(e32shdr + i, (*e64shdr) + (*sections64),
-                             *size_total);
+                             *size_total, *section_names_offset);
                 (*sections64)++;
                 (*sections_offsets)[i] = *size_total;
                 *size_total += (e32shdr[i].sh_size | 0xf) +
@@ -161,22 +247,49 @@ int count_things(
         }
     }
 
+    *strtab_len += *trampoline_strtab_len;
+
+    for (int i = 0; i < e32hdr->e_shnum; ++i)
+    {
+        fprintf(stderr, "(%d : %d) ", i, (*sections_reorder)[i]);
+    }
+    fprintf(stderr, "\n");
+
+    /* Reorder section numbers in section symbols */
+    for (int i = 1; i < *symbols; ++i)
+    {
+        if (ELF32_ST_TYPE((*e64sym)[i].st_info) == STT_SECTION)
+        {
+            if ((*sections_reorder)[(*e64sym)[i].st_shndx] == 0)
+            {
+                (*e64sym)[i].st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
+            }
+            else
+            {
+                (*e64sym)[i].st_shndx =
+                    (*sections_reorder)[(*e64sym)[i].st_shndx];
+            }
+        }
+        else
+        {
+            (*e64sym)[i].st_shndx = (*sections_reorder)[(*e64sym)[i].st_shndx];
+        }
+    }
+
     int strtabidx = e32shdr[*symtabidx].sh_link;
-    convert_shdr(e32shdr + strtabidx, (*e64shdr) + (*sections64), *size_total);
+    convert_shdr(e32shdr + strtabidx, (*e64shdr) + (*sections64), *size_total,
+                 *section_names_offset);
     (*e64shdr)[*sections64].sh_size = *strtab_len;
     *size_total += ((*strtab_len) | 0xf) + 1;
     fprintf(stderr, "Changing size_total to %ld\n", *size_total);
     (*sections64)++;
 
     convert_shdr(e32shdr + (*symtabidx), (*e64shdr) + (*sections64),
-                 *size_total);
+                 *size_total, *section_names_offset);
     (*e64shdr)[*sections64].sh_entsize = sizeof(Elf64_Sym);
-    (*e64shdr)[*sections64].sh_info = *first_nonlocal_symbol + *sections64 + 1;
-    (*e64shdr)[*sections64].sh_size =
-        ((*symbols) + (*sections64) + 1) * sizeof(Elf64_Sym);
+    (*e64shdr)[*sections64].sh_size = (*symbols) * sizeof(Elf64_Sym);
     (*sections64)++;
-    *symbols += *sections64; /* a symbol will be generated for every section */
-    *size_total += (((*symbols) * sizeof(Elf64_Sym)) | 0xf) + 1;
+    *size_total += (*symbols) * sizeof(Elf64_Sym);
     fprintf(stderr, "Changing size_total to %ld\n", *size_total);
 
     fprintf(stderr, "There are %d sections\n", *sections64);
@@ -184,11 +297,8 @@ int count_things(
     for (int i = 0; i < *sections64; ++i)
     {
         (*e64shdr)[i].sh_link = (*sections_reorder)[(*e64shdr)[i].sh_link];
-        (*e64shdr)[i].sh_name += (*section_names_offset);
         fprintf(stderr, "[OFFSET IN STRTAB] %d\n", (*e64shdr)[i].sh_name);
     }
-
-    *first_nonlocal_symbol += *sections64;
 
     fprintf(stderr,
             "section_names_offset = %lu symbol_names_offset = %lu strtab_len = "

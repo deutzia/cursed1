@@ -33,4 +33,6 @@ tlist *lookup_flist(const char *);
 
 void destruct_flist();
 
+size_t get_flist_size();
+
 #endif /* ZSO_HANDLE_FLIST */

@@ -54,7 +54,8 @@ int copy_sections(FILE *f, void *elf)
     return 0;
 }
 
-int create_strtab(FILE *f, void *elf)
+int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
+                  size_t trampoline_strtab_len)
 {
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
     Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
@@ -75,119 +76,12 @@ int create_strtab(FILE *f, void *elf)
             total += e32shdr[i].sh_size;
         }
     }
-    size_t s = (total | 0xf) + 1 - total;
-    if (fwrite_helper(zeroes, 1, s, f) != s)
+    if (fwrite_helper(trampoline_strtab, 1, trampoline_strtab_len, f) !=
+        trampoline_strtab_len)
     {
         return 1;
     }
-
-    return 0;
-}
-
-int create_symtab(FILE *f, void *elf, off_t str_offset, int *sections_reorder,
-                  int sections64)
-{
-    Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
-    Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
-    size_t total = 0;
-    Elf64_Sym e64sym_tmp;
-
-    /* write 0th symbol */
-    e64sym_tmp.st_name = 0;
-    e64sym_tmp.st_info = 0;
-    e64sym_tmp.st_other = 0;
-    e64sym_tmp.st_shndx = 0; /* TODO? */
-    e64sym_tmp.st_value = 0;
-    e64sym_tmp.st_size = 0;
-    if (fwrite_helper(&e64sym_tmp, 1, sizeof(Elf64_Sym), f) !=
-        sizeof(Elf64_Sym))
-    {
-        return 1;
-    }
-    total += sizeof(Elf64_Sym);
-
-    /* create a symbol for every section */
-    for (int i = 0; i < sections64; ++i)
-    {
-        e64sym_tmp.st_name = 0;
-        e64sym_tmp.st_info = ELF64_ST_INFO(STB_LOCAL, STT_SECTION);
-        e64sym_tmp.st_other = STV_DEFAULT;
-        e64sym_tmp.st_shndx = i; /* TODO? */
-        e64sym_tmp.st_value = 0;
-        e64sym_tmp.st_size = 0;
-        if (fwrite_helper(&e64sym_tmp, 1, sizeof(Elf64_Sym), f) !=
-            sizeof(Elf64_Sym))
-        {
-            return 1;
-        }
-        total += sizeof(Elf64_Sym);
-    }
-
-    for (int i = 0; i < e32hdr->e_shnum; ++i)
-    {
-        if (e32shdr[i].sh_type == SHT_SYMTAB)
-        {
-            int num_entries = e32shdr[i].sh_size / e32shdr[i].sh_entsize;
-            fprintf(stderr, "num entries=  %d\n", num_entries);
-
-            Elf32_Sym *e32sym = (Elf32_Sym *)(elf + e32shdr[i].sh_offset);
-            for (int j = 0; j < num_entries; ++j)
-            {
-                switch (ELF32_ST_TYPE(e32sym[j].st_info))
-                {
-                case STT_NOTYPE: {
-                    fprintf(stderr, "STT_NOTYPE\n");
-                    break;
-                }
-                case STT_FUNC: {
-                    fprintf(stderr, "STT_FUNC\n");
-                    break;
-                }
-                case STT_OBJECT: {
-                    fprintf(stderr, "STT_OBJECT\n");
-                    break;
-                }
-                case STT_SECTION: {
-                    fprintf(stderr, "STT_SECTION\n");
-                    break;
-                }
-                case STT_FILE: {
-                    fprintf(stderr, "STT_FILE\n");
-                    break;
-                }
-                default: {
-                    fprintf(stderr, "OTHER TYPE\n");
-                    break;
-                }
-                }
-                switch (ELF32_ST_TYPE(e32sym[j].st_info))
-                {
-                case STT_FUNC:
-                case STT_OBJECT: {
-                    Elf64_Sym *e64sym = convert_symbol(e32sym + j, str_offset,
-                                                       sections_reorder);
-                    if (e64sym == NULL)
-                    {
-                        return 1;
-                    }
-                    if (fwrite_helper(e64sym, 1, sizeof(Elf64_Sym), f) !=
-                        sizeof(Elf64_Sym))
-                    {
-                        free(e64sym);
-                        return 1;
-                    }
-                    total += sizeof(Elf64_Sym);
-                    free(e64sym);
-                    break;
-                }
-                default: {
-                    /* ignore all the others */
-                    break;
-                }
-                }
-            }
-        }
-    }
+    total += trampoline_strtab_len;
 
     size_t s = (total | 0xf) + 1 - total;
     if (fwrite_helper(zeroes, 1, s, f) != s)
@@ -198,10 +92,22 @@ int create_symtab(FILE *f, void *elf, off_t str_offset, int *sections_reorder,
     return 0;
 }
 
-int write_headers(FILE *f, Elf64_Shdr *e64, int sections64)
+int write_symtab(FILE *f, Elf64_Sym *e64, int symbols)
 {
-    if (fwrite_helper(e64, 1, sizeof(Elf64_Shdr) * sections64, f) !=
-        sizeof(Elf64_Shdr) * sections64)
+    fprintf(stderr, "there are %d symbols, size of one is %lu\n", symbols,
+            sizeof(Elf64_Sym));
+    if (fwrite_helper(e64, 1, sizeof(Elf64_Sym) * symbols, f) !=
+        sizeof(Elf64_Sym) * symbols)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+int write_headers(FILE *f, Elf64_Shdr *e64, int sections)
+{
+    if (fwrite_helper(e64, 1, sizeof(Elf64_Shdr) * sections, f) !=
+        sizeof(Elf64_Shdr) * sections)
     {
         return 1;
     }

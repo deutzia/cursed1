@@ -33,18 +33,12 @@ Elf64_Ehdr *convert_hdr(Elf32_Ehdr *e32)
     return e64;
 }
 
-Elf64_Sym *convert_symbol(Elf32_Sym *e32, int str_offset, int *sections_reorder)
+void convert_symbol(Elf32_Sym *e32, Elf64_Sym *e64, int str_offset)
 {
-    Elf64_Sym *e64 = malloc(sizeof(Elf64_Sym));
-    if (e64 == NULL)
-    {
-        return NULL;
-    }
-
     e64->st_name = e32->st_name + str_offset;
     e64->st_info = e32->st_info;
     e64->st_other = e32->st_other;
-    e64->st_shndx = sections_reorder[e32->st_shndx];
+    e64->st_shndx = e32->st_shndx; /* will be reordered later */
     e64->st_value = e32->st_value;
     e64->st_size = e32->st_size;
     fprintf(stderr, "symbol size = %lu symbol_type = ", e64->st_size);
@@ -77,13 +71,12 @@ Elf64_Sym *convert_symbol(Elf32_Sym *e32, int str_offset, int *sections_reorder)
     }
         fprintf(stderr, "\n");
     }
-
-    return e64;
 }
 
-void convert_shdr(Elf32_Shdr *e32, Elf64_Shdr *e64, off_t section_offset)
+void convert_shdr(Elf32_Shdr *e32, Elf64_Shdr *e64, off_t section_offset,
+                  off_t name_offset)
 {
-    e64->sh_name = e32->sh_name;
+    e64->sh_name = e32->sh_name + name_offset;
     e64->sh_type = e32->sh_type;
     e64->sh_flags = e32->sh_flags;
     e64->sh_addr = e32->sh_addr;

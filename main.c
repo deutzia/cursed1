@@ -8,6 +8,7 @@
 
 #include "convert_elf.h"
 #include "count.h"
+#include "handle_flist.h"
 #include "read_elf.h"
 #include "write_elf.h"
 
@@ -40,6 +41,8 @@ int main(int argc, char *argv[])
     int *sections_reorder = NULL;
     off_t *sections_offsets = NULL;
     Elf64_Shdr *e64shdr = NULL;
+    char *trampoline_strtab = NULL;
+    Elf64_Sym *e64sym = NULL;
 
     if (argc != 4)
     {
@@ -79,6 +82,13 @@ int main(int argc, char *argv[])
         goto handle_err;
     }
 
+    if (!initialize_flist(flist_infile))
+    {
+        handler = handle_fatal;
+        msg = "Failed to parse flist file";
+        goto handle_err;
+    }
+
     if (!read_hdr(mapped_elf))
     {
         handler = handle_fatal;
@@ -90,13 +100,15 @@ int main(int argc, char *argv[])
     off_t shdr_off = 0;
     int sections64_count = 0;
     off_t strings_len;
-    int symbols, first_nonlocal_symbol, symtabidx;
+    int symbols, symtabidx;
     off_t symbol_names_offset, section_names_offset;
+    size_t trampoline_strtab_len = 0;
 
     if (count_things(mapped_elf, &sections64_count, &e64shdr, &shdr_off,
-                     &strings_len, &symbols, &first_nonlocal_symbol,
-                     &sections_reorder, &sections_offsets, &symbol_names_offset,
-                     &section_names_offset, &symtabidx) != 0)
+                     &strings_len, &symbols, &sections_reorder,
+                     &sections_offsets, &symbol_names_offset,
+                     &section_names_offset, &symtabidx, &trampoline_strtab,
+                     &trampoline_strtab_len, &e64sym) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to do counting of objects in the elf";
@@ -139,15 +151,15 @@ int main(int argc, char *argv[])
         goto handle_err;
     }
 
-    if (create_strtab(elf_outfile, mapped_elf) != 0)
+    if (create_strtab(elf_outfile, mapped_elf, trampoline_strtab,
+                      trampoline_strtab_len) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to produce strtab section";
         goto handle_err;
     }
 
-    if (create_symtab(elf_outfile, mapped_elf, symbol_names_offset,
-                      sections_reorder, sections64_count) != 0)
+    if (write_symtab(elf_outfile, e64sym, symbols) != 0)
     {
         handler = handle_fatal;
         msg = "Failed to produce symtab section";
@@ -161,6 +173,9 @@ int main(int argc, char *argv[])
         goto handle_err;
     }
 
+    destruct_flist();
+    free(trampoline_strtab);
+    free(e64sym);
     free(e64shdr);
     free(sections_offsets);
     free(sections_reorder);
@@ -174,6 +189,15 @@ int main(int argc, char *argv[])
 
 handle_err:
     err = errno;
+    destruct_flist();
+    if (trampoline_strtab != NULL)
+    {
+        free(trampoline_strtab);
+    }
+    if (e64sym != NULL)
+    {
+        free(e64sym);
+    }
     if (e64shdr != NULL)
     {
         free(e64shdr);

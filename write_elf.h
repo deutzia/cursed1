@@ -8,10 +8,10 @@ size_t write_hdr(FILE *, Elf64_Ehdr *);
 
 int copy_sections(FILE *, void *);
 
-int create_strtab(FILE *, void *);
+int create_strtab(FILE *, void *, char *trampoline_strtab,
+                  size_t trampoline_strtab_len);
 
-int create_symtab(FILE *, void *, off_t str_offset, int *sections_reorder,
-                  int sections64);
+int write_symtab(FILE *, Elf64_Sym *, int symbols);
 
 int write_headers(FILE *, Elf64_Shdr *, int sections64);
 

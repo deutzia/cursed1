@@ -20,6 +20,7 @@ static void destruct_flist_internal(flist *f)
     if (f != NULL)
     {
         destruct_flist_internal(f->next);
+        free(f->name);
         free(f);
     }
 }
@@ -148,4 +149,16 @@ tlist *lookup_flist(const char *fname)
 void destruct_flist()
 {
     destruct_flist_internal(flist_head);
+}
+
+size_t get_flist_size()
+{
+    flist *current_node = flist_head;
+    size_t result = 0;
+    while (current_node != NULL)
+    {
+        result++;
+        current_node = current_node->next;
+    }
+    return result;
 }

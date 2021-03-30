@@ -140,8 +140,7 @@ int count_things(
                 case STT_FUNC: { /* symbols that may be found in flist */
                     char *symbol_name = strtab + e32sym[j].st_name;
                     fprintf(stderr, "Processing symbol %s\n", symbol_name);
-                    tlist *arg = lookup_flist(symbol_name);
-                    if (arg != NULL)
+                    if (lookup_flist(symbol_name))
                     {
                         /* trampoline will be generated for this symbol */
                         size_t new_len =

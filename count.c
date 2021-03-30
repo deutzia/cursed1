@@ -182,10 +182,6 @@ int count_things(
                     break;
                 }
                 case STT_OBJECT: {
-                    if (ELF32_ST_BIND(e32sym[j].st_info) == STB_LOCAL)
-                    {
-                        // assume all local ones are before nonlocal ones */
-                    }
                     convert_symbol(e32sym + j, (*e64sym) + j,
                                    symbol_names_offset);
                     break;
@@ -297,7 +293,6 @@ int count_things(
         {
             if ((*sections_reorder)[(*e64sym)[i].st_shndx] == 0)
             {
-//                (*e64sym)[i].st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
                 memset((*e64sym) + i, '\0', sizeof(Elf64_Sym));
             }
             else

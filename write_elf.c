@@ -29,8 +29,8 @@ int copy_sections(FILE *f, void *elf)
         default: {
             if (e32shdr[i].sh_flags & SHF_ALLOC)
             {
-                if (fwrite(elf + e32shdr[i].sh_offset, 1,
-                                  e32shdr[i].sh_size, f) != e32shdr[i].sh_size)
+                if (fwrite(elf + e32shdr[i].sh_offset, 1, e32shdr[i].sh_size,
+                           f) != e32shdr[i].sh_size)
                 {
                     return 1;
                 }
@@ -68,8 +68,8 @@ int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
     {
         if (e32shdr[i].sh_type == SHT_STRTAB)
         {
-            if (fwrite(elf + e32shdr[i].sh_offset, 1, e32shdr[i].sh_size,
-                              f) != e32shdr[i].sh_size)
+            if (fwrite(elf + e32shdr[i].sh_offset, 1, e32shdr[i].sh_size, f) !=
+                e32shdr[i].sh_size)
             {
                 return 1;
             }

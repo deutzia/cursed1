@@ -89,7 +89,7 @@ parseConverterOut contents =
     let linesToParse = filter (not . null) (lines contents) in
     mapM parseConverterOutLine linesToParse
 
-getEnv :: String -> String -> ParseM ((M.Map String FunType), [(String, Direction)])
+getEnv :: String -> String -> ParseM (M.Map String FunType, [(String, Direction)])
 getEnv flist converter_out = do
     flist' <- parseFlist flist
     dirs <- parseConverterOut converter_out

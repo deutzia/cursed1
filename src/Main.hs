@@ -10,6 +10,7 @@ import System.Exit
 import Data.Bits
 import Data.Maybe as Maybe
 import System.Process
+import Debug.Trace
 
 data Direction = In | Out deriving Show
 data Type = Void | Int_ | Uint | Long | Ulong | Longlong | Ulonglong | Ptr deriving (Show, Eq)
@@ -129,7 +130,7 @@ saveArgs args =
                 acc ++ "\tmov [rsp + " ++ show off ++ "], " ++
                 (if s == 8 then wide else slim) ++ "\n"))
             (0, "")
-            (zip args argRegisters)
+            (reverse (zip args argRegisters))
     in movs
 
 jumpTo32 :: String -> String
@@ -208,6 +209,7 @@ trampolineInEntryPoint64 name (FunType retType argTypes) =
     convertReturned32To64 retType ++
     "\tadd rsp, " ++ show (sizeOnStackAligned argTypes) ++ "\n" ++
     restoreRegisters ++
+    "\tret\n" ++
     "\n"
 
 generateTrampolines :: (M.Map String FunType, [(String, Direction)]) -> String
@@ -231,7 +233,7 @@ main :: IO ()
 main = do
     args <- getArgs
     case args of
-        [origElf, flist, converterOut, asmFname, tempElf, tempElf2, resultElf] -> do
+        [flist, converterOut, asmFname] -> do
 --            callCommand $ "./main " ++ origElf ++ " " ++ flist ++ " " ++ tempElf ++ " > " ++ converterOut
             flist' <- readFile flist
             converterOut' <- readFile converterOut

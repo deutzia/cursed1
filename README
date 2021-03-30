@@ -1,3 +1,6 @@
+Dependencies:
+Install nasm and haskell-stack before building and runing the converter
+
 Assumptions:
 * Exactly one section SHT_SYMTAB exists and it links to .strtab
 * There can be dead strings in some SHT_STRTAB

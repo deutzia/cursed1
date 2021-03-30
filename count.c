@@ -317,7 +317,8 @@ int count_things(
         {
             if ((*sections_reorder)[(*e64sym)[i].st_shndx] == 0)
             {
-                (*e64sym)[i].st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
+//                (*e64sym)[i].st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
+                memset((*e64sym) + i, '\0', sizeof(Elf64_Sym));
             }
             else
             {

@@ -124,7 +124,7 @@ argRegisters = [("rdi", "edi"), ("rsi", "esi"), ("rdx", "edx"), ("rcx", "ecx"), 
 
 saveArgs :: [Type] -> String
 saveArgs args =
-    "\tsub rsp, " ++ show (sizeOnStackAligned args) ++ "\n" ++
+    "\tsub rsp, " ++ show (sizeOnStackAligned8 args) ++ "\n" ++
     let
         (_, movs) = foldr
             (\(t, (wide, slim)) (off, acc) ->
@@ -141,10 +141,14 @@ fetchArgs args =
     let
         (_, movs) = foldr
             (\(t, (wide, slim)) (off, acc) ->
-                let s = sizeOf32 t in
-                (off + s,
-                acc ++ "\tmov " ++ (if s == 8 then wide else slim) ++
-                ", [rsp + " ++ show off ++ "]\n"))
+                let s32 = sizeOf32 t in
+                (off + s32,
+                acc ++
+                (if t == Long
+                    then "\tmovsxd " ++ wide
+                    else "\tmov " ++ (if s32 == 8 then wide else slim))
+                ++ ", [rsp + " ++ show off ++ "]\n"
+                ))
             (16, "")
             (reverse (zip args argRegisters))
     in movs
@@ -178,8 +182,8 @@ sizeOf32 Ptr = 4
 sizeOnStack :: [Type] -> Int
 sizeOnStack = foldl (\acc t -> acc + sizeOf32 t) 0
 
-sizeOnStackAligned :: [Type] -> Int
-sizeOnStackAligned l = ((sizeOnStack l -1) .|. 0xf) + 1
+sizeOnStackAligned8 :: [Type] -> Int
+sizeOnStackAligned8 l = ((sizeOnStack l -9) .|. 0xf) + 9
 
 convertReturned32To64 :: Type -> String
 convertReturned32To64 Void = ""
@@ -235,7 +239,7 @@ trampolineInEntryPoint64 name (FunType retType argTypes) =
     trampolineEntryPoint64Name name ++ ":\n" ++
     "\t[bits 64]\n" ++
     convertReturned32To64 retType ++
-    "\tadd rsp, " ++ show (sizeOnStackAligned argTypes) ++ "\n" ++
+    "\tadd rsp, " ++ show (sizeOnStackAligned8 argTypes) ++ "\n" ++
     restoreRegisters ++
     "\tret\n" ++
     "\n"

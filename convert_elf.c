@@ -104,5 +104,7 @@ void convert_relocation(Elf32_Rel *e32, Elf64_Rela *e64, void *section_contents)
     }
     e64->r_offset = e32->r_offset;
     e64->r_info = ELF64_R_INFO(sym, type);
-    e64->r_addend = *(uint32_t *)(section_contents + e32->r_offset);
+    int64_t addend = *(int32_t *)(section_contents + e32->r_offset);
+    *(int32_t *)(section_contents + e32->r_offset) = 0;
+    e64->r_addend = addend;
 }

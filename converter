@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+set -e
+
+origdir=$(pwd)
+scriptdir=$(dirname $0)
+args=()
+for arg in $@; do
+    args+=($(readlink -f $arg))
+done
+
+cd $scriptdir
+elf1=raw_elf64.o
+elf2=trampoline.o
+asm=trampoline.asm
+converter_out=trampoline_directions.txt
+./main ${args[0]} ${args[1]} $elf1 > $converter_out
+stack exec trampoline_generator ${args[1]} $converter_out $asm
+nasm -f elf64 $asm -o $elf2
+ld -r $elf1 $elf2 -o ${args[2]}
+
+cd $origdir
+exit $ret

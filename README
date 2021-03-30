@@ -1,5 +1,13 @@
-Dependencies:
-Install nasm and haskell-stack before building and runing the converter
+Before running have a lot of free space on the vm, haskell runtime is big.
+Especially if the one in repository is very outdated.
+
+Install (with `apt-get`) `nasm` and `stack-haskell`.
+Run `stack upgrade --force-download` then click y to enable it to run with
+sudo. Make sure stack version is 2.5+ with `stack --version`.
+After this, `make` should be able to just build the project.
+Executable `converter` calls other programs, so it should not be copied to
+other directories.
+
 
 Assumptions:
 * Exactly one section SHT_SYMTAB exists and it links to .strtab
@@ -14,4 +22,4 @@ Assumptions:
   is divisible by 16.
 * All local symbols are located before glocal symbols, as described in
   https://docs.oracle.com/cd/E53394_01/html/E54813/man-sts.html#scrolltoc
-* There are no relocations to symtab and strtab, those would be weird.
+

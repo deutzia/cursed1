@@ -6,3 +6,7 @@ main
 z1_test
 zso1-example
 stack.yaml.lock
+.stack-work/
+trampoline_directions.txt
+trampoline.asm
+

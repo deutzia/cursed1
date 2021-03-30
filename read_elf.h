@@ -5,6 +5,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-bool read_hdr(void *);
+void read_hdr(void *);
 
 #endif /* ZSO_READ_ELF */

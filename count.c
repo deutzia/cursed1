@@ -6,19 +6,16 @@
 
 #include "convert_elf.h"
 #include "handle_flist.h"
+#include "utils.h"
 
 const char *TRAMPOLINE_PREFIX = "_ZSO_trampoline_";
 
-int count_things(
+void count_things(
     void *elf,
-    int *sections64,        /* number of sections to copy wo touching them */
-    Elf64_Shdr **e64shdr,   /* headers of sections that will be created */
-    off_t *size_total,      /* size of stuff before section headers */
-    off_t *strtab_len,      /* length of STRTAB entries that get copied */
-    int *symbols,           /* count symbols */
-    int **sections_reorder, /* mapping of old section numbers to new ones */
-    off_t *
-        *sections_offsets, /* mapping of old section numbers to new offsets */
+    int *sections64,      /* number of sections to copy wo touching them */
+    Elf64_Shdr **e64shdr, /* headers of sections that will be created */
+    off_t *size_total,    /* size of stuff before section headers */
+    int *symbols,         /* count symbols */
     char **
         trampoline_strtab, /* new strtab that needs to be glued into old ones */
     size_t *trampoline_strtab_len, /* length of that strtab */
@@ -31,7 +28,6 @@ int count_things(
     Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
     off_t symbol_names_offset = 0;
     off_t section_names_offset = 0;
-    /* shstrtab or shrtab, actually */
     int symtabidx = 0;
     int shstrndx = e32hdr->e_shstrndx;
     int symstrndx = 0;
@@ -39,40 +35,43 @@ int count_things(
     {
         if (e32shdr[i].sh_type == SHT_SYMTAB)
         {
+            if (symtabidx != 0)
+            {
+                handle_fatal("Two symtabs found");
+            }
             symstrndx = e32shdr[i].sh_link;
             symtabidx = i;
-            break; /*assume there is exactly one symtab */
         }
     }
-    *sections_reorder = calloc(e32hdr->e_shnum, sizeof(int));
-    if (*sections_reorder == NULL)
+    int *sections_reorder = calloc(e32hdr->e_shnum, sizeof(int));
+    if (sections_reorder == NULL)
     {
-        return 1;
+        handle_fatal(mem);
     }
-    *sections_offsets = calloc(e32hdr->e_shnum, sizeof(off_t));
-    if (*sections_offsets == NULL)
+    off_t *sections_offsets = calloc(e32hdr->e_shnum, sizeof(off_t));
+    if (sections_offsets == NULL)
     {
-        return 1;
+        handle_fatal(mem);
     }
     *e64shdr = calloc(e32hdr->e_shnum + 8, sizeof(Elf64_Shdr));
     if (*e64shdr == NULL)
     {
-        return 1;
+        handle_fatal(mem);
     }
     *sections64 = 0;
     *size_total = sizeof(Elf64_Ehdr);
-    *strtab_len = 0;
+    off_t strtab_len = 0;
     *symbols = 0;
     *trampoline_strtab_len = 0;
     size_t trampoline_strtab_allocated =
         get_flist_size() * (strlen(TRAMPOLINE_PREFIX) + 10);
     *trampoline_strtab = malloc(trampoline_strtab_allocated);
-    *rel_size = 0;
-    *e64rel = NULL;
     if (*trampoline_strtab == NULL)
     {
-        return 1;
+        handle_fatal(mem);
     }
+    *rel_size = 0;
+    *e64rel = NULL;
 
     for (int i = 0; i < e32hdr->e_shnum; ++i)
     {
@@ -80,13 +79,13 @@ int count_things(
         {
             if (i == shstrndx)
             {
-                section_names_offset += *strtab_len;
+                section_names_offset += strtab_len;
             }
             if (i == symstrndx)
             {
-                symbol_names_offset += *strtab_len;
+                symbol_names_offset += strtab_len;
             }
-            *strtab_len += e32shdr[i].sh_size;
+            strtab_len += e32shdr[i].sh_size;
         }
         else
         {
@@ -100,7 +99,7 @@ int count_things(
     *e64sym = calloc(*symbols, sizeof(Elf64_Sym));
     if (*e64sym == NULL)
     {
-        return 1;
+        handle_fatal(mem);
     }
 
     /* after this loop the following have to be fixed:
@@ -113,7 +112,7 @@ int count_things(
         {
         case SHT_NULL: /* explicitly copy 0th element of section table */
         {
-            (*sections_reorder)[i] = (*sections64);
+            sections_reorder[i] = (*sections64);
             convert_shdr(e32shdr + i, (*e64shdr) + (*sections64), 0, 0);
             (*sections64)++;
             break;
@@ -124,8 +123,7 @@ int count_things(
             Elf32_Sym *e32sym = (Elf32_Sym *)(elf + e32shdr[i].sh_offset);
             if (e32shdr[i].sh_link == 0)
             {
-                /* no name info, considering this incorrect */
-                return 1;
+                handle_fatal("No name info for symbols");
             }
             char *strtab = elf + e32shdr[e32shdr[i].sh_link].sh_offset;
             for (int j = 0; j < num_entries; ++j)
@@ -143,7 +141,7 @@ int count_things(
                         convert_symbol(e32sym + j, (*e64sym) + j,
                                        symbol_names_offset);
                         (*e64sym)[j].st_name =
-                            (*trampoline_strtab_len) + (*strtab_len);
+                            (*trampoline_strtab_len) + strtab_len;
                         while ((*trampoline_strtab_len) + new_len >
                                trampoline_strtab_allocated)
                         {
@@ -152,7 +150,7 @@ int count_things(
                                         2 * trampoline_strtab_allocated);
                             if (new_mem == NULL)
                             {
-                                return -1;
+                                handle_fatal(mem);
                             }
                             *trampoline_strtab = new_mem;
                             trampoline_strtab_allocated *= 2;
@@ -211,11 +209,11 @@ int count_things(
         default: {
             if (e32shdr[i].sh_flags & SHF_ALLOC)
             {
-                (*sections_reorder)[i] = (*sections64);
+                sections_reorder[i] = (*sections64);
                 convert_shdr(e32shdr + i, (*e64shdr) + (*sections64),
                              *size_total, section_names_offset);
                 (*sections64)++;
-                (*sections_offsets)[i] = *size_total;
+                sections_offsets[i] = *size_total;
                 *size_total += (e32shdr[i].sh_size | 0xf) +
                                1; /* or-ing here aligns size to 16 */
             }
@@ -228,7 +226,7 @@ int count_things(
         /* checking sh_info here assumes that there are no relocations to strtab
          * or symtab */
         if (e32shdr[i].sh_type == SHT_REL &&
-            (*sections_reorder)[e32shdr[i].sh_info] != 0)
+            sections_reorder[e32shdr[i].sh_info] != 0)
         {
             int num_entries = e32shdr[i].sh_size / e32shdr[i].sh_entsize;
             size_t new_size = (*rel_size) + num_entries * sizeof(Elf64_Rela);
@@ -236,7 +234,7 @@ int count_things(
             void *new_mem = realloc(*e64rel, new_size);
             if (new_mem == NULL)
             {
-                return 1;
+                handle_fatal(mem);
             }
             *e64rel = new_mem;
             void *target_section = elf + e32shdr[e32shdr[i].sh_info].sh_offset;
@@ -251,12 +249,12 @@ int count_things(
             }
             convert_shdr(e32shdr + i, (*e64shdr) + (*sections64), *size_total,
                          section_names_offset);
-            (*sections_offsets)[i] = *size_total;
-            (*sections_reorder)[i] = *sections64;
+            sections_offsets[i] = *size_total;
+            sections_reorder[i] = *sections64;
             *size_total += ((num_entries * sizeof(Elf64_Rela)) | 0xf) + 1;
             (*e64shdr)[*sections64].sh_type = SHT_RELA;
             (*e64shdr)[*sections64].sh_info =
-                (*sections_reorder)[(*e64shdr)[*sections64].sh_info];
+                sections_reorder[(*e64shdr)[*sections64].sh_info];
             (*e64shdr)[*sections64].sh_entsize = sizeof(Elf64_Rela);
             (*e64shdr)[*sections64].sh_size = sizeof(Elf64_Rela) * num_entries;
             (*sections64)++;
@@ -272,46 +270,45 @@ int count_things(
         switch (e32shdr[i].sh_type)
         {
         case SHT_SYMTAB: {
-            (*sections_reorder)[i] = *sections64 + 1;
-            (*sections_offsets)[i] = ((*size_total + *strtab_len) | 0xf) + 1;
+            sections_reorder[i] = *sections64 + 1;
+            sections_offsets[i] = ((*size_total + strtab_len) | 0xf) + 1;
             break;
         }
         case SHT_STRTAB: {
-            (*sections_reorder)[i] = *sections64;
-            (*sections_offsets)[i] = *size_total;
+            sections_reorder[i] = *sections64;
+            sections_offsets[i] = *size_total;
             break;
         }
         }
     }
 
-    *strtab_len += *trampoline_strtab_len;
+    strtab_len += *trampoline_strtab_len;
 
     /* Reorder section numbers in section symbols */
     for (int i = 1; i < *symbols; ++i)
     {
         if (ELF32_ST_TYPE((*e64sym)[i].st_info) == STT_SECTION)
         {
-            if ((*sections_reorder)[(*e64sym)[i].st_shndx] == 0)
+            if (sections_reorder[(*e64sym)[i].st_shndx] == 0)
             {
                 memset((*e64sym) + i, '\0', sizeof(Elf64_Sym));
             }
             else
             {
-                (*e64sym)[i].st_shndx =
-                    (*sections_reorder)[(*e64sym)[i].st_shndx];
+                (*e64sym)[i].st_shndx = sections_reorder[(*e64sym)[i].st_shndx];
             }
         }
         else
         {
-            (*e64sym)[i].st_shndx = (*sections_reorder)[(*e64sym)[i].st_shndx];
+            (*e64sym)[i].st_shndx = sections_reorder[(*e64sym)[i].st_shndx];
         }
     }
 
     int strtabidx = e32shdr[symtabidx].sh_link;
     convert_shdr(e32shdr + strtabidx, (*e64shdr) + (*sections64), *size_total,
                  section_names_offset);
-    (*e64shdr)[*sections64].sh_size = *strtab_len;
-    *size_total += ((*strtab_len) | 0xf) + 1;
+    (*e64shdr)[*sections64].sh_size = strtab_len;
+    *size_total += ((strtab_len) | 0xf) + 1;
     (*sections64)++;
 
     convert_shdr(e32shdr + symtabidx, (*e64shdr) + (*sections64), *size_total,
@@ -323,8 +320,8 @@ int count_things(
 
     for (int i = 0; i < *sections64; ++i)
     {
-        (*e64shdr)[i].sh_link = (*sections_reorder)[(*e64shdr)[i].sh_link];
+        (*e64shdr)[i].sh_link = sections_reorder[(*e64shdr)[i].sh_link];
     }
-
-    return 0;
+    free(sections_reorder);
+    free(sections_offsets);
 }

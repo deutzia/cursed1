@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-bool initialize_flist(FILE *);
+void initialize_flist(FILE *);
 
 // look up a symbol in flist
 bool lookup_flist(const char *);

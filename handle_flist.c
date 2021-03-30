@@ -6,6 +6,8 @@
 
 #include <stdlib.h>
 
+#include "utils.h"
+
 typedef struct flist
 {
     char *name;
@@ -24,7 +26,7 @@ static void destruct_flist_internal(flist *f)
     }
 }
 
-bool initialize_flist(FILE *file)
+void initialize_flist(FILE *file)
 {
     char *buffer = NULL;
     size_t size;
@@ -45,15 +47,12 @@ bool initialize_flist(FILE *file)
                 node = calloc(1, sizeof(flist));
                 if (node == NULL)
                 {
-                    free(buffer);
-                    return false;
+                    handle_fatal(mem);
                 }
                 node->name = malloc((i + 1) * sizeof(char));
                 if (node->name == NULL)
                 {
-                    free(buffer);
-                    free(node);
-                    return false;
+                    handle_fatal(mem);
                 }
                 strcpy(node->name, buffer + word_begining);
             }
@@ -65,7 +64,6 @@ bool initialize_flist(FILE *file)
         }
     }
     free(buffer);
-    return true;
 }
 
 // get type of function with given name or NULL if not found

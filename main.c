@@ -101,15 +101,13 @@ int main(int argc, char *argv[])
     off_t shdr_off = 0;
     int sections64_count = 0;
     off_t strings_len;
-    int symbols, symtabidx;
-    off_t symbol_names_offset, section_names_offset;
+    int symbols;
     size_t trampoline_strtab_len = 0;
     size_t rel_size = 0;
 
     if (count_things(mapped_elf, &sections64_count, &e64shdr, &shdr_off,
                      &strings_len, &symbols, &sections_reorder,
-                     &sections_offsets, &symbol_names_offset,
-                     &section_names_offset, &symtabidx, &trampoline_strtab,
+                     &sections_offsets, &trampoline_strtab,
                      &trampoline_strtab_len, &e64sym, &e64rel, &rel_size) != 0)
     {
         handler = handle_fatal;

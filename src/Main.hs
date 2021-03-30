@@ -9,8 +9,6 @@ import Control.Monad.Except
 import System.Exit
 import Data.Bits
 import Data.Maybe as Maybe
-import System.Process
-import Debug.Trace
 
 data Direction = In | Out deriving Show
 data Type = Void | Int_ | Uint | Long | Ulong | Longlong | Ulonglong | Ptr deriving (Show, Eq)
@@ -56,14 +54,17 @@ parseArgType :: String -> ParseM Type
 parseArgType t =
     parseType t >>=
         (\t' -> if t' == Void
-            then throwError "Cannot have argumentb of type void"
+            then throwError "Cannot have arguments of type void"
             else return t')
 
 parseLine :: String -> ParseM FunFullType
 parseLine line =
     let w = words line in
     case w of
-        fName : (retType : argTypes) -> (\ft -> (fName, ft)) <$> ((FunType <$> parseType retType) <*> mapM parseArgType argTypes)
+        fName : (retType : argTypes) ->
+            if length argTypes > 6
+                then throwError "Too many args, assumed max is 6"
+                else (\ft -> (fName, ft)) <$> ((FunType <$> parseType retType) <*> mapM parseArgType argTypes)
         _ -> throwError "Line should have at least two words: function name and returned type"
 
 parseFlist :: String -> ParseM [FunFullType]
@@ -107,7 +108,9 @@ trampolinePrelude =
         helper (name, In) =
             "global " ++ name ++ "\n" ++
             "extern " ++ trampolinePrefix ++ name ++ "\n"
-        helper (_, Out) = ""
+        helper (name, Out) =
+            "global " ++ trampolinePrefix ++ name ++ "\n" ++
+            "extern " ++ name ++ "\n"
     in concatMap helper
 
 trampolineEntryPoint32Name :: String -> String
@@ -130,6 +133,19 @@ saveArgs args =
                 acc ++ "\tmov [rsp + " ++ show off ++ "], " ++
                 (if s == 8 then wide else slim) ++ "\n"))
             (0, "")
+            (reverse (zip args argRegisters))
+    in movs
+
+fetchArgs :: [Type] -> String
+fetchArgs args =
+    let
+        (_, movs) = foldr
+            (\(t, (wide, slim)) (off, acc) ->
+                let s = sizeOf32 t in
+                (off + s,
+                acc ++ "\tmov " ++ (if s == 8 then wide else slim) ++
+                ", [rsp + " ++ show off ++ "]\n"))
+            (16, "")
             (reverse (zip args argRegisters))
     in movs
 
@@ -165,6 +181,34 @@ sizeOnStack = foldl (\acc t -> acc + sizeOf32 t) 0
 sizeOnStackAligned :: [Type] -> Int
 sizeOnStackAligned l = ((sizeOnStack l -1) .|. 0xf) + 1
 
+convertReturned32To64 :: Type -> String
+convertReturned32To64 Void = ""
+convertReturned32To64 Int_ =
+    "\tmovsxd rdx, eax\n" ++
+    "\tmov rax, rdx\n"
+convertReturned32To64 Uint =
+    "\tmov eax, eax\n"
+convertReturned32To64 Long = convertReturned32To64 Int_
+convertReturned32To64 Ulong = convertReturned32To64 Uint
+convertReturned32To64 Longlong =
+    "\tmov eax, eax\n" ++
+    "\tshl rdx, 32\n" ++
+    "\t or rax, rdx\n"
+convertReturned32To64 Ulonglong = convertReturned32To64 Longlong
+convertReturned32To64 Ptr = convertReturned32To64 Uint
+
+convertReturned64To32 :: Type -> String
+convertReturned64To32 Void = ""
+convertReturned64To32 Int_ = ""
+convertReturned64To32 Uint = ""
+convertReturned64To32 Long = ""
+convertReturned64To32 Ulong = ""
+convertReturned64To32 Longlong =
+    "\tmov rdx, rax\n" ++
+    "\t shr rdx, 32\n"
+convertReturned64To32 Ulonglong = convertReturned64To32 Longlong
+convertReturned64To32 Ptr = ""
+
 trampolineInEntryPoint :: String -> FunType -> String
 trampolineInEntryPoint name (FunType _retType argTypes) =
     name ++ ":\n" ++
@@ -186,22 +230,6 @@ trampolineInEntryPoint32 name =
     jumpTo64 name ++
     "\n"
 
-convertReturned32To64 :: Type -> String
-convertReturned32To64 Void = ""
-convertReturned32To64 Int_ =
-    "\tmovsxd rdx, eax\n" ++
-    "\tmov rax, rdx\n"
-convertReturned32To64 Uint =
-    "\tmov eax, eax\n"
-convertReturned32To64 Long = convertReturned32To64 Int_
-convertReturned32To64 Ulong = convertReturned32To64 Uint
-convertReturned32To64 Longlong =
-    "\tmov eax, eax\n" ++
-    "\tshl rdx, 32\n" ++
-    "\t or rax, rdx\n"
-convertReturned32To64 Ulonglong = convertReturned32To64 Longlong
-convertReturned32To64 Ptr = convertReturned32To64 Uint
-
 trampolineInEntryPoint64 :: String -> FunType -> String
 trampolineInEntryPoint64 name (FunType retType argTypes) =
     trampolineEntryPoint64Name name ++ ":\n" ++
@@ -209,6 +237,36 @@ trampolineInEntryPoint64 name (FunType retType argTypes) =
     convertReturned32To64 retType ++
     "\tadd rsp, " ++ show (sizeOnStackAligned argTypes) ++ "\n" ++
     restoreRegisters ++
+    "\tret\n" ++
+    "\n"
+
+trampolineOutEntryPoint :: String -> String
+trampolineOutEntryPoint name =
+    trampolinePrefix ++ name ++ ":\n" ++
+    "\t[bits 32]\n" ++
+    "\tpush edi\n" ++
+    "\tpush esi\n" ++
+    "\tsub esp, 4\n" ++
+    jumpTo64 name ++
+    "\n"
+
+trampolineOutEntryPoint64 :: String -> FunType -> String
+trampolineOutEntryPoint64 name (FunType retType argTypes) =
+    trampolineEntryPoint64Name name ++ ":\n" ++
+    "\t[bits 64]\n" ++
+    fetchArgs argTypes ++
+    "\tcall " ++ name ++ "\n" ++
+    convertReturned64To32 retType ++
+    jumpTo32 name ++
+    "\n"
+
+trampolineOutEntryPoint32 :: String -> String
+trampolineOutEntryPoint32 name =
+    trampolineEntryPoint32Name name ++ ":\n" ++
+    "\t[bits 32]\n" ++
+    "\tadd esp, 4\n" ++
+    "\tpop esi\n" ++
+    "\tpop edi\n" ++
     "\tret\n" ++
     "\n"
 
@@ -221,7 +279,12 @@ generateTrampolines (types, converterOut) =
             trampolineInEntryPoint32 name ++
             trampolineInEntryPoint64 name t ++
             "\n"
-        helper (_, Out) = ""
+        helper (name, Out) =
+            let t = Maybe.fromJust (M.lookup name types) in
+            trampolineOutEntryPoint name ++
+            trampolineOutEntryPoint64 name t ++
+            trampolineOutEntryPoint32 name ++
+            "\n"
     in
     "default rel\n" ++
     "bits 64\n\n" ++
@@ -234,14 +297,11 @@ main = do
     args <- getArgs
     case args of
         [flist, converterOut, asmFname] -> do
---            callCommand $ "./main " ++ origElf ++ " " ++ flist ++ " " ++ tempElf ++ " > " ++ converterOut
             flist' <- readFile flist
             converterOut' <- readFile converterOut
             case runExcept (Main.getEnv flist' converterOut') of
                 Left err -> hPutStrLn stderr err >> exitFailure
                 Right parseResult -> do
                     writeFile asmFname $ generateTrampolines parseResult
---                    callCommand $ "nasm -g -f elf64 " ++ asmFname ++ " -o " ++ tempElf2
---                    callCommand $ "ld -r " ++ tempElf2 ++ " " ++ tempElf ++ " -o " ++ resultElf
                     exitSuccess
         _ -> hPutStrLn stderr "Incorrect usage" >> exitFailure

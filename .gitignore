@@ -1,7 +1,8 @@
 *.o
 *.swp
 *.swo
-converter
+main
 *.tar
 z1_test
 zso1-example
+stack.yaml.lock

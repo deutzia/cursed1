@@ -247,7 +247,7 @@ int count_things(
         /* checking sh_info here assumes that there are no relocations to strtab
          * or symtab */
         if (e32shdr[i].sh_type == SHT_REL &&
-            sections_reorder[e32shdr[i].sh_info] != 0)
+            (*sections_reorder)[e32shdr[i].sh_info] != 0)
         {
             fprintf(stderr, "SHT_REL\n");
             int num_entries = e32shdr[i].sh_size / e32shdr[i].sh_entsize;
@@ -259,6 +259,7 @@ int count_things(
                 return 1;
             }
             *e64rel = new_mem;
+            void* target_section = elf + e32shdr[e32shdr[i].sh_info].sh_offset;
             Elf32_Rel *e32rel = (Elf32_Rel *)(elf + e32shdr[i].sh_offset);
             for (int j = 0; j < num_entries; ++j)
             {
@@ -266,7 +267,7 @@ int count_things(
                                    (Elf64_Rela *)(((void *)(*e64rel)) +
                                                   (*rel_size) +
                                                   j * sizeof(Elf64_Rela)),
-                                   elf + e32shdr[i].sh_offset);
+                                   target_section);
             }
             convert_shdr(e32shdr + i, (*e64shdr) + (*sections64), *size_total,
                          *section_names_offset);

@@ -123,11 +123,9 @@ int main(int argc, char *argv[])
         goto handle_err;
     }
 
-    fprintf(stderr, "shdr_off = %ld\n", shdr_off);
     e64hdr->e_shoff = shdr_off;
     e64hdr->e_shnum = sections64_count;
     e64hdr->e_shstrndx = sections64_count - 2;
-    /* TODO to ^ sie zmieni jak beda relokacje */
 
     elf_outfile = fopen(argv[3], "wb");
     if (elf_outfile == NULL)

@@ -41,36 +41,6 @@ void convert_symbol(Elf32_Sym *e32, Elf64_Sym *e64, int str_offset)
     e64->st_shndx = e32->st_shndx; /* will be reordered later */
     e64->st_value = e32->st_value;
     e64->st_size = e32->st_size;
-    fprintf(stderr, "symbol size = %lu symbol_type = ", e64->st_size);
-
-    switch (ELF32_ST_TYPE(e32->st_info))
-    {
-    case STT_NOTYPE: {
-        fprintf(stderr, "STT_NOTYPE\n");
-        break;
-    }
-    case STT_FUNC: {
-        fprintf(stderr, "STT_FUNC\n");
-        break;
-    }
-    case STT_OBJECT: {
-        fprintf(stderr, "STT_OBJECT\n");
-        break;
-    }
-    case STT_SECTION: {
-        fprintf(stderr, "STT_SECTION\n");
-        break;
-    }
-    case STT_FILE: {
-        fprintf(stderr, "STT_FILE\n");
-        break;
-    }
-    default: {
-        fprintf(stderr, "OTHER TYPE\n");
-        break;
-    }
-        fprintf(stderr, "\n");
-    }
 }
 
 void convert_shdr(Elf32_Shdr *e32, Elf64_Shdr *e64, off_t section_offset,

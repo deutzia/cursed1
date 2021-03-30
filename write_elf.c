@@ -5,22 +5,13 @@
 
 static const char zeroes[16] = {};
 
-size_t fwrite_helper(const void *ptr, size_t s1, size_t s2, FILE *f)
-{
-    size_t result = fwrite(ptr, s1, s2, f);
-    fprintf(stderr, "Written %lu bytes\n", result);
-    return result;
-}
-
 size_t write_hdr(FILE *f, Elf64_Ehdr *header)
 {
-    fprintf(stderr, "writing elf header\n");
-    return fwrite_helper(header, 1, sizeof(Elf64_Ehdr), f);
+    return fwrite(header, 1, sizeof(Elf64_Ehdr), f);
 }
 
 int copy_sections(FILE *f, void *elf)
 {
-    fprintf(stderr, "copying sections\n");
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
     Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
 
@@ -38,13 +29,13 @@ int copy_sections(FILE *f, void *elf)
         default: {
             if (e32shdr[i].sh_flags & SHF_ALLOC)
             {
-                if (fwrite_helper(elf + e32shdr[i].sh_offset, 1,
+                if (fwrite(elf + e32shdr[i].sh_offset, 1,
                                   e32shdr[i].sh_size, f) != e32shdr[i].sh_size)
                 {
                     return 1;
                 }
                 size_t s = (e32shdr[i].sh_size | 0xf) + 1 - e32shdr[i].sh_size;
-                if (fwrite_helper(zeroes, 1, s, f) != s)
+                if (fwrite(zeroes, 1, s, f) != s)
                 {
                     return 1;
                 }
@@ -58,8 +49,7 @@ int copy_sections(FILE *f, void *elf)
 
 int write_relocations(FILE *f, Elf64_Rela *e64, size_t rel_size)
 {
-    fprintf(stderr, "writing relocations\n");
-    if (fwrite_helper(e64, 1, rel_size, f) != rel_size)
+    if (fwrite(e64, 1, rel_size, f) != rel_size)
     {
         return 1;
     }
@@ -69,7 +59,6 @@ int write_relocations(FILE *f, Elf64_Rela *e64, size_t rel_size)
 int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
                   size_t trampoline_strtab_len)
 {
-    fprintf(stderr, "writing strtab\n");
     Elf32_Ehdr *e32hdr = (Elf32_Ehdr *)elf;
     Elf32_Shdr *e32shdr = (Elf32_Shdr *)(elf + e32hdr->e_shoff);
 
@@ -79,7 +68,7 @@ int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
     {
         if (e32shdr[i].sh_type == SHT_STRTAB)
         {
-            if (fwrite_helper(elf + e32shdr[i].sh_offset, 1, e32shdr[i].sh_size,
+            if (fwrite(elf + e32shdr[i].sh_offset, 1, e32shdr[i].sh_size,
                               f) != e32shdr[i].sh_size)
             {
                 return 1;
@@ -87,7 +76,7 @@ int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
             total += e32shdr[i].sh_size;
         }
     }
-    if (fwrite_helper(trampoline_strtab, 1, trampoline_strtab_len, f) !=
+    if (fwrite(trampoline_strtab, 1, trampoline_strtab_len, f) !=
         trampoline_strtab_len)
     {
         return 1;
@@ -95,7 +84,7 @@ int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
     total += trampoline_strtab_len;
 
     size_t s = (total | 0xf) + 1 - total;
-    if (fwrite_helper(zeroes, 1, s, f) != s)
+    if (fwrite(zeroes, 1, s, f) != s)
     {
         return 1;
     }
@@ -105,14 +94,13 @@ int create_strtab(FILE *f, void *elf, char *trampoline_strtab,
 
 int write_symtab(FILE *f, Elf64_Sym *e64, int symbols)
 {
-    fprintf(stderr, "writing symtab\n");
     size_t s = sizeof(Elf64_Sym) * symbols;
-    if (fwrite_helper(e64, 1, s, f) != s)
+    if (fwrite(e64, 1, s, f) != s)
     {
         return 1;
     }
     s = ((s | 0xf) + 1) - s;
-    if (fwrite_helper(zeroes, 1, s, f) != s)
+    if (fwrite(zeroes, 1, s, f) != s)
     {
         return 1;
     }
@@ -121,8 +109,7 @@ int write_symtab(FILE *f, Elf64_Sym *e64, int symbols)
 
 int write_headers(FILE *f, Elf64_Shdr *e64, int sections)
 {
-    fprintf(stderr, "Writing %d section headers\n", sections);
-    if (fwrite_helper(e64, 1, sizeof(Elf64_Shdr) * sections, f) !=
+    if (fwrite(e64, 1, sizeof(Elf64_Shdr) * sections, f) !=
         sizeof(Elf64_Shdr) * sections)
     {
         return 1;

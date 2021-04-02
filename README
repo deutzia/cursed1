@@ -5,8 +5,9 @@ Install (with `apt-get`) `nasm` and `stack-haskell`.
 Run `stack upgrade --force-download` then click y to enable it to run with
 sudo. Make sure stack version is 2.5+ with `stack --version`.
 After this, `make` should be able to just build the project.
-Executable `converter` calls other programs, so it should not be copied to
-other directories.
+Executable `converter` calls other programs (and calls stack exec which
+is dependent on the current directory), so it should not be copied to
+other directories alone.
 
 
 Assumptions:
@@ -22,4 +23,14 @@ Assumptions:
   is divisible by 16.
 * All local symbols are located before glocal symbols, as described in
   https://docs.oracle.com/cd/E53394_01/html/E54813/man-sts.html#scrolltoc
+
+Solution approach:
+Nonobvious things I do: I glue both SHT_STRTAB together if two exist. This
+also seems to work if only one is there.
+I add prefix _ZSO_trampoline_ to symbols from original elf for which
+trampolines need to be genrated. And I do some other weird things so that the
+rest of that elf seems 64-bit enough. Trampolines are generatied with Haskell,
+and two elf files are then glued together with `ld -r`. Files `raw_elf.o`,
+`trampoline_directions.txt`, `trampoline.asm` and `trampoline.o` are generated
+in the process and left for reference.
 

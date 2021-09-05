@@ -10,14 +10,18 @@ flist=$(readlink -f "$2")
 out_elf=$(readlink -f "$3")
 
 cd $scriptdir
-elf1=raw_elf64.o
-elf2=trampoline.o
-asm=trampoline.asm
+elf1=$(mktemp)
+elf2=$(mktemp)
+asm=t$(mktemp)
 converter_out=trampoline_directions.txt
 ./main "$in_elf" "$flist" $elf1 > $converter_out
 stack exec trampoline_generator "$flist" $converter_out $asm
 nasm -f elf64 $asm -o $elf2
 ld -r $elf1 $elf2 -o "$out_elf"
+
+rm elf1
+rm elf2
+rm asm
 
 cd $origdir
 exit $ret
